@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass, asdict
 from datetime import datetime as dt
 import httpx
@@ -45,7 +46,7 @@ class Result:
         
 def request_news_index(session: httpx.Client):
     response = None
-    for i in range(1, 2):
+    for i in range(1, 301):
         url = f"https://indeks.kompas.com/?page={i}"
         logger.info(f"Page {i: 3d}: {url}")
         try:
@@ -121,4 +122,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt as kb_interrupt:
+        sys.exit(kb_interrupt)
+    except Exception as others:
+        logger.error(others)
