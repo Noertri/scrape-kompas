@@ -89,6 +89,7 @@ def get_article_content(source_page: str):
 
 
 def scraper():
+    db = create_db()
     with httpx.Client(follow_redirects=True, timeout=10.) as session:
         for page in request_news_index(session):
             if page:
@@ -104,7 +105,10 @@ def scraper():
                             url=link
                         )
 
-                        yield result
+                        with db.begin() as db_sesi:
+                            insert_records(db_sesi, asdict(result))
+
+    return True
 
 
 def insert_records(session: Session, records: dict[str, str]):
@@ -114,12 +118,8 @@ def insert_records(session: Session, records: dict[str, str]):
 
 
 def main():
-    db_session = create_db()
-    with db_session.begin() as session:
-        for result in scraper():
-            if result:
-                insert_records(session, asdict(result))
-
+    scraper()
+    
 
 if __name__ == "__main__":
     try:
