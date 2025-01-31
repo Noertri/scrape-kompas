@@ -115,6 +115,7 @@ def insert_records(session: Session, records: dict[str, str]):
     stmt = insert(ArticlesDB)
     on_conflict_stmt = stmt.on_conflict_do_nothing(index_elements=[ArticlesDB.url])
     session.execute(on_conflict_stmt, records)
+    session.commit()
 
 
 def main():
