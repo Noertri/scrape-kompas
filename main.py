@@ -1,5 +1,12 @@
+from dataclasses import dataclass, asdict
+from datetime import datetime as dt
 import httpx
 from bs4 import BeautifulSoup
+from sqlalchemy.orm import Session
+from sqlalchemy.dialects.sqlite import insert
+from database import create_db
+from models import ArticlesDB
+from cacher import cached
 
 
 headers = {
@@ -20,9 +27,23 @@ headers = {
     # 'TE': 'trailers',
 }
 
+
+@dataclass
+class Result:
+    tanggal: str = ""
+    judul: str = ""
+    narasi: str = ""
+    url: str = ""
+
+    def __init__(self, *, tanggal, judul, narasi, url):
+        self.tanggal = dt.strptime(tanggal, "%d/%M/%Y").strftime("%Y-%M-%d")
+        self.judul = judul
+        self.narasi = narasi
+        self.url = url
+
         
 def request_news_index(session: httpx.Client):
-    for i in range(1, 301):
+    for i in range(1, 2):
         url = f"https://indeks.kompas.com/?page={i}"
         response = session.get(url, headers=headers)
 
@@ -40,6 +61,7 @@ def get_article_urls(source_page: str):
         yield post_date, title, tag.get("href", "")
 
 
+@cached
 def request_article_content(session: httpx.Client, url: str):
     params = {
         'page': 'all',
@@ -66,15 +88,28 @@ def scraper():
                 if response:
                     content = get_article_content(response.text)
 
-                    result = {
-                        "tanggal": post_date,
-                        "judul": title,
-                        "narasi": content,
-                        "url": link
-                    }
+                    result = Result(
+                        tanggal=post_date,
+                        judul=title,
+                        narasi=content,
+                        url=link
+                    )
 
                     yield result
 
 
+def insert_records(session: Session, records: dict[str, str]):
+    stmt = insert(ArticlesDB)
+    on_conflict_stmt = stmt.on_conflict_do_nothing(index_elements=[ArticlesDB.url])
+    session.execute(on_conflict_stmt, records)
+
+
+def main():
+    db_session = create_db()
+    with db_session.begin() as session:
+        for result in scraper():
+            insert_records(session, asdict(result))
+
+
 if __name__ == "__main__":
-    scraper()
+    main()
