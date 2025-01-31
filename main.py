@@ -7,6 +7,7 @@ from sqlalchemy.dialects.sqlite import insert
 from database import create_db
 from models import ArticlesDB
 from cacher import cached
+from custom_logger import logger
 
 
 headers = {
@@ -43,12 +44,15 @@ class Result:
 
         
 def request_news_index(session: httpx.Client):
-    for i in range(1, 2):
+    for i in range(1, 301):
         url = f"https://indeks.kompas.com/?page={i}"
-        response = session.get(url, headers=headers)
 
-        if response.status_code < 400:
+        try:
+            response = session.get(url, headers=headers)
             yield response
+        except (httpx.HTTPError, httpx.HTTPStatusError, httpx.TimeoutException) as req_error:
+            logger.error(f"{i: 3d}:[{request_news_index.__name__}] {req_error} => {url}")
+            yield None
 
 
 def get_article_urls(source_page: str):
@@ -67,35 +71,37 @@ def request_article_content(session: httpx.Client, url: str):
         'page': 'all',
     }
 
-    response = session.get(url, headers=headers, params=params)
-
-    if response.status_code < 400:
+    try:
+        response = session.get(url, headers=headers, params=params)
         return response
+    except (httpx.HTTPError, httpx.TimeoutException, httpx.HTTPStatusError) as request_error:
+        raise Exception("[{0}] {1} => {2}".format(request_article_content.__name__, request_error, url))
 
 
 def get_article_content(source_page: str):
     soup = BeautifulSoup(source_page, "html.parser")
-    p_tags = soup.select("div.read__content p")
-    content = "\n".join([tag.get_text(strip=True, separator=" ") for tag in p_tags])
+    tag = soup.select_one("div.read__content")
+    content = tag.get_text(strip=True, separator=" ")
     return content
 
 
 def scraper():
     with httpx.Client(follow_redirects=True, timeout=10.) as session:
         for page in request_news_index(session):
-            for post_date, title, link in get_article_urls(page.text):
-                response = request_article_content(session, link)
-                if response:
-                    content = get_article_content(response.text)
+            if page:
+                for post_date, title, link in get_article_urls(page.text):
+                    response = request_article_content(session, url=link)
+                    if response:
+                        content = get_article_content(response.text)
 
-                    result = Result(
-                        tanggal=post_date,
-                        judul=title,
-                        narasi=content,
-                        url=link
-                    )
+                        result = Result(
+                            tanggal=post_date,
+                            judul=title,
+                            narasi=content,
+                            url=link
+                        )
 
-                    yield result
+                        yield result
 
 
 def insert_records(session: Session, records: dict[str, str]):
@@ -108,7 +114,8 @@ def main():
     db_session = create_db()
     with db_session.begin() as session:
         for result in scraper():
-            insert_records(session, asdict(result))
+            if result:
+                insert_records(session, asdict(result))
 
 
 if __name__ == "__main__":
