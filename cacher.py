@@ -12,7 +12,7 @@ def cached(f):
 
         if cache_file.exists():
             file_obj = cache_file.open("r", encoding="utf-8")
-            caches.extend(file_obj.readlines())
+            caches = [c.strip() for c in file_obj.readlines()]
             file_obj.close()
 
         if url not in caches:
@@ -26,8 +26,8 @@ def cached(f):
                 file_obj = cache_file.open("a", encoding="utf-8")
                 file_obj.write(url+"\n")
                 file_obj.close()
-            else:
-                logger.info(f"{next(counter): 4d} : [SKIP] {url}")
+        else:
+            logger.info(f"{next(counter): 4d} : [SKIP] {url}")
         
         return ret
 

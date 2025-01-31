@@ -44,15 +44,17 @@ class Result:
 
         
 def request_news_index(session: httpx.Client):
-    for i in range(1, 301):
+    response = None
+    for i in range(1, 2):
         url = f"https://indeks.kompas.com/?page={i}"
-
+        logger.info(f"Page {i: 3d}: {url}")
         try:
             response = session.get(url, headers=headers)
-            yield response
         except (httpx.HTTPError, httpx.HTTPStatusError, httpx.TimeoutException) as req_error:
-            logger.error(f"{i: 3d}:[{request_news_index.__name__}] {req_error} => {url}")
-            yield None
+            logger.error(f"Page {i: 3d}: [{request_news_index.__name__}] {req_error} => {url}")
+            continue
+        finally:
+            yield response
 
 
 def get_article_urls(source_page: str):
